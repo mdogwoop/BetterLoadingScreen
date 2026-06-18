@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BetterLoadingScreen — Web Recreation</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
+  #app { position: fixed; inset: 0; }
+
+  /* --- Overlay UI (logo + loading text), mirrors VRCLogo + LoadingInfoPanel --- */
+  #overlay {
+    position: fixed; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: 8vh 0; box-sizing: border-box;
+  }
+  #logo {
+    color: #cfefff; font-weight: 800; letter-spacing: .35em; font-size: clamp(22px, 4vw, 48px);
+    text-shadow: 0 0 18px rgba(90,180,255,.9), 0 0 40px rgba(40,120,255,.5);
+  }
+  #info {
+    color: #bfe6ff; font-size: clamp(12px, 1.6vw, 16px); letter-spacing: .08em; text-align: center;
+    text-shadow: 0 0 10px rgba(80,160,255,.7);
+  }
+  #bar { width: min(420px, 70vw); height: 4px; margin-top: 14px; border-radius: 4px;
+         background: rgba(120,180,255,.15); overflow: hidden; }
+  #bar > div { height: 100%; width: 35%; border-radius: 4px;
+         background: linear-gradient(90deg, #2a6cff, #7fd4ff);
+         box-shadow: 0 0 12px #4aa0ff; animation: load 2.4s ease-in-out infinite; }
+  @keyframes load { 0%{transform:translateX(-120%)} 100%{transform:translateX(320%)} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="overlay">
+  <div id="logo">V R C H A T</div>
+  <div>
+    <div id="info">Connecting to the warp tunnel…</div>
+    <div id="bar"><div></div></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const app = document.getElementById('app');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 0);
+
+// ---------------------------------------------------------------------------
+// 1. Space background (stand-in for the SkyCube). Vertical teal->black gradient
+//    on a large inward-facing sphere. Swap this for a real cubemap extracted
+//    from loading.assetbundle via CubeTextureLoader if you want 1:1 fidelity.
+// ---------------------------------------------------------------------------
+const bgGeo = new THREE.SphereGeometry(500, 32, 32);
+const bgMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: { top: { value: new THREE.Color(0x06243a) }, bottom: { value: new THREE.Color(0x000008) } },
+  vertexShader: `varying vec3 vp; void main(){ vp = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+  fragmentShader: `varying vec3 vp; uniform vec3 top; uniform vec3 bottom;
+    void main(){ float h = normalize(vp).y*0.5+0.5; gl_FragColor = vec4(mix(bottom, top, h),1.0);} `
+});
+scene.add(new THREE.Mesh(bgGeo, bgMat));
+
+// ---------------------------------------------------------------------------
+// 2. Warp tunnel — a cylinder around the camera with a scrolling additive
+//    glow texture, the signature element of the old VRChat loading screen.
+// ---------------------------------------------------------------------------
+function makeTunnelTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 70; i++) {
+    const x = Math.random() * 256, w = 1 + Math.random() * 3;
+    const a = 0.15 + Math.random() * 0.6;
+    const grd = g.createLinearGradient(x, 0, x, 256);
+    grd.addColorStop(0, `rgba(120,200,255,0)`);
+    grd.addColorStop(0.5, `rgba(120,200,255,${a})`);
+    grd.addColorStop(1, `rgba(120,200,255,0)`);
+    g.fillStyle = grd; g.fillRect(x, 0, w, 256);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(6, 2);
+  return t;
+}
+const tunnelTex = makeTunnelTexture();
+const tunnel = new THREE.Mesh(
+  new THREE.CylinderGeometry(14, 14, 600, 48, 1, true),
+  new THREE.MeshBasicMaterial({ map: tunnelTex, side: THREE.BackSide, transparent: true,
+    blending: THREE.AdditiveBlending, color: 0x4aa0ff, depthWrite: false })
+);
+tunnel.rotation.x = Math.PI / 2;           // align the cylinder down the -Z view axis
+tunnel.position.z = -250;
+scene.add(tunnel);
+
+// ---------------------------------------------------------------------------
+// 3. Warp starfield — points streaking toward the camera (the "Stars" object).
+// ---------------------------------------------------------------------------
+const STAR_COUNT = 1200, RANGE = 600;
+const positions = new Float32Array(STAR_COUNT * 3);
+function resetStar(i, full) {
+  const r = 2 + Math.random() * 11, a = Math.random() * Math.PI * 2;
+  positions[i*3]   = Math.cos(a) * r;
+  positions[i*3+1] = Math.sin(a) * r;
+  positions[i*3+2] = full ? -Math.random() * RANGE : -RANGE;
+}
+for (let i = 0; i < STAR_COUNT; i++) resetStar(i, true);
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+const stars = new THREE.Points(starGeo,
+  new THREE.PointsMaterial({ color: 0xbfe6ff, size: 0.6, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false }));
+scene.add(stars);
+
+// ---------------------------------------------------------------------------
+// Animation loop
+// ---------------------------------------------------------------------------
+const clock = new THREE.Clock();
+function animate() {
+  const dt = clock.getDelta();
+  tunnelTex.offset.y -= dt * 0.9;          // scroll the tunnel walls toward you
+  tunnel.rotation.y += dt * 0.15;          // slow swirl
+
+  const speed = 160 * dt;
+  for (let i = 0; i < STAR_COUNT; i++) {
+    positions[i*3+2] += speed;             // move stars toward the camera (+Z)
+    if (positions[i*3+2] > 0) resetStar(i, false);
+  }
+  starGeo.attributes.position.needsUpdate = true;
+
+  camera.rotation.z += dt * 0.05;          // gentle roll, sells the "flight"
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
