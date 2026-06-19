@@ -260,3 +260,6 @@ paket-files/
 __pycache__/
 *.pyc
 /OldLoadingScreen/oldloadingscreen_nobox.assetbundle
+
+# Web demo needs this mesh tracked despite the global *.obj rule
+!web/assets/*.obj
