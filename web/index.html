@@ -120,11 +120,12 @@ async function buildNebulae() {
   await Promise.all(Object.entries(files).map(async ([k, f]) => { tex[k] = await loadTex(f); }));
 
   // [texture key, direction (x,y,z), scale, opacity, texture-rotation]
+  // Warm glow fills roughly the whole bottom-right quarter, fading along the bottom.
   const clouds = [
-    ['orange',  [ 0.58, -0.46, -0.66], 860, 0.95, 0.2],   // main warm glow, bottom-right
-    ['orange2', [ 0.30, -0.70, -0.62], 660, 0.55, 1.7],   // spreads warmth along the bottom
-    ['red',     [-0.42, -0.58, -0.70], 540, 0.32, 2.6],   // faint warmth, bottom-left
-    ['blue',    [-0.55,  0.42, -0.72], 500, 0.20, 1.1],   // very faint cool tint, upper-left
+    ['orange',  [ 0.62, -0.52, -0.58], 1500, 1.0,  0.2],   // main warm glow, bottom-right
+    ['orange2', [ 0.30, -0.66, -0.62], 1150, 0.7,  1.7],   // extends warmth along the bottom
+    ['red',     [-0.40, -0.60, -0.66],  820, 0.3,  2.6],   // faint warmth, bottom-left
+    ['blue',    [-0.55,  0.42, -0.72],  520, 0.18, 1.1],   // very faint cool tint, upper-left
   ];
   for (const [key, dir, scale, opacity, rot] of clouds) {
     const t = tex[key];
@@ -157,13 +158,30 @@ function proceduralTunnelTex() {
   return new THREE.CanvasTexture(c);
 }
 let tunnelTex;
-const tunnel = new THREE.Mesh(
-  new THREE.CylinderGeometry(16, 16, 900, 48, 1, true),
+const TUNNEL_LEN = 900;
+const tunnelGeo = new THREE.CylinderGeometry(16, 16, TUNNEL_LEN, 64, 120, true);
+// Twist the cylinder into a gentle helix so the longitudinal streaks read as
+// curved, spiralling rays from the centre — the real warp is a vortex, not the
+// straight radial lines a plain cylinder produces. Needs many height segments
+// for the spiral to stay smooth.
+(function twist(geo, turns) {
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const ang = (y / TUNNEL_LEN) * turns * Math.PI * 2;
+    const c = Math.cos(ang), s = Math.sin(ang);
+    p.setX(i, x * c - z * s);
+    p.setZ(i, x * s + z * c);
+  }
+  p.needsUpdate = true;
+})(tunnelGeo, 0.85);
+const tunnel = new THREE.Mesh(tunnelGeo,
   new THREE.MeshBasicMaterial({ side: THREE.BackSide, transparent: true,
     blending: THREE.AdditiveBlending, color: 0x1e4a7a, depthWrite: false }));
 tunnel.rotation.x = Math.PI / 2;     // lay the cylinder down the -Z view axis
 tunnel.position.z = -380;
 scene.add(tunnel);
+const VIEW_AXIS = new THREE.Vector3(0, 0, 1);   // spin the vortex about screen centre
 
 async function buildTunnel() {
   tunnelTex = (await loadTex('warp_tunnel_mask.png')) || proceduralTunnelTex();
@@ -223,6 +241,7 @@ const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (tunnelTex) tunnelTex.offset.y -= dt * 0.7;       // streaks scroll toward you
+  tunnel.rotateOnWorldAxis(VIEW_AXIS, dt * 0.08);      // slow vortex swirl
 
   for (let i = 0; i < STAR_COUNT; i++) {
     positions[i*3+2] += STAR_SPEED * speeds[i] * dt;   // fly toward the camera
