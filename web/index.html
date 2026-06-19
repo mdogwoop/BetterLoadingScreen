@@ -157,38 +157,73 @@ function proceduralTunnelTex() {
   }
   return new THREE.CanvasTexture(c);
 }
-let tunnelTex;
-const TUNNEL_LEN = 900;
-const tunnelGeo = new THREE.CylinderGeometry(16, 16, TUNNEL_LEN, 64, 120, true);
-// Twist the cylinder into a gentle helix so the longitudinal streaks read as
-// curved, spiralling rays from the centre — the real warp is a vortex, not the
-// straight radial lines a plain cylinder produces. Needs many height segments
-// for the spiral to stay smooth.
-(function twist(geo, turns) {
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const ang = (y / TUNNEL_LEN) * turns * Math.PI * 2;
-    const c = Math.cos(ang), s = Math.sin(ang);
-    p.setX(i, x * c - z * s);
-    p.setZ(i, x * s + z * c);
-  }
-  p.needsUpdate = true;
-})(tunnelGeo, 0.85);
-const tunnel = new THREE.Mesh(tunnelGeo,
-  new THREE.MeshBasicMaterial({ side: THREE.BackSide, transparent: true,
-    blending: THREE.AdditiveBlending, color: 0x1e4a7a, depthWrite: false }));
+// Recreation of the FORGE3D/WarpTunnel shader used by the real screen. The mask
+// texture is sampled on TWO animated UV layers down a cylinder the camera sits
+// inside: one scrolls straight (the pale background streaks), the other scrolls
+// the opposite way with a sine wiggle in U (the curved blue spiralling streaks).
+// Two different rates make it read as random — never perfectly repeating — and a
+// view-distance fade darkens the far end into the central hole. Parameters are
+// seeded from the extracted material (warp_tunnel_001): _V_TileAnimFactor 0.52,
+// _V_TileAnimFactor_copy -0.19, _U_TileAnimFactor 0.105, _Wiggle/_WiggleDist,
+// node colour rgb(0.08,0.73,1.0).
+const tunnelUniforms = {
+  map:         { value: null },
+  uTime:       { value: 0 },
+  uSpeed:      { value: 0.55 },                          // master scroll rate
+  uVfacA:      { value: 0.52 },                          // straight layer
+  uVfacB:      { value: -0.19 },                         // curved layer (opposite)
+  uUfac:       { value: 0.105 },                         // slow U drift
+  uWiggleFreq: { value: 7.0 },
+  uWiggleAmp:  { value: 0.16 },
+  uTiles:      { value: new THREE.Vector2(3.0, 2.4) },   // around, along
+  uColA:       { value: new THREE.Color(0x9ec7ee) },     // pale straight background
+  uColB:       { value: new THREE.Color(0x16bcff) },     // blue curved spiral
+  uOpacity:    { value: 0.6 },
+  uFadeStart:  { value: 70.0 },
+  uFadeEnd:    { value: 560.0 },
+};
+const tunnel = new THREE.Mesh(
+  new THREE.CylinderGeometry(40, 40, 700, 96, 1, true),
+  new THREE.ShaderMaterial({
+    uniforms: tunnelUniforms, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, side: THREE.BackSide,
+    vertexShader: `
+      varying vec2 vUv; varying float vDist;
+      void main(){
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vDist = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D map;
+      uniform float uTime,uSpeed,uVfacA,uVfacB,uUfac,uWiggleFreq,uWiggleAmp,uOpacity,uFadeStart,uFadeEnd;
+      uniform vec2 uTiles; uniform vec3 uColA,uColB;
+      varying vec2 vUv; varying float vDist;
+      void main(){
+        vec2 uv = vUv * uTiles;
+        float t = uTime * uSpeed;
+        // straight layer — pale background streaks flying toward you
+        vec2 uvA = vec2(uv.x + uUfac * t, uv.y + uVfacA * t);
+        // curved layer — sine wiggle in U bends the streaks into spirals
+        float w = sin(uv.y * uWiggleFreq + uTime * 1.3) * uWiggleAmp;
+        vec2 uvB = vec2(uv.x + w, uv.y + uVfacB * t);
+        float a = texture2D(map, uvA).r;
+        float b = texture2D(map, uvB).r;
+        vec3 col = uColA * a * 0.8 + uColB * b;
+        float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, vDist);
+        gl_FragColor = vec4(col * uOpacity * fade, 1.0);   // additive
+      }`,
+  }));
 tunnel.rotation.x = Math.PI / 2;     // lay the cylinder down the -Z view axis
-tunnel.position.z = -380;
+tunnel.position.z = -300;            // camera (z=0) sits inside, near the rim
 scene.add(tunnel);
 const VIEW_AXIS = new THREE.Vector3(0, 0, 1);   // spin the vortex about screen centre
 
 async function buildTunnel() {
-  tunnelTex = (await loadTex('warp_tunnel_mask.png')) || proceduralTunnelTex();
-  tunnelTex.wrapS = tunnelTex.wrapT = THREE.RepeatWrapping;
-  tunnelTex.repeat.set(5, 2);
-  tunnel.material.map = tunnelTex;
-  tunnel.material.needsUpdate = true;
+  const tex = (await loadTex('warp_tunnel_mask.png')) || proceduralTunnelTex();
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tunnelUniforms.map.value = tex;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,8 +275,8 @@ const STAR_SPEED = 240;
 const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
-  if (tunnelTex) tunnelTex.offset.y -= dt * 0.7;       // streaks scroll toward you
-  tunnel.rotateOnWorldAxis(VIEW_AXIS, dt * 0.08);      // slow vortex swirl
+  tunnelUniforms.uTime.value += dt;                    // drives the two scroll layers + wiggle
+  tunnel.rotateOnWorldAxis(VIEW_AXIS, dt * 0.1);       // slow vortex swirl (F3DWarpTunnel)
 
   for (let i = 0; i < STAR_COUNT; i++) {
     positions[i*3+2] += STAR_SPEED * speeds[i] * dt;   // fly toward the camera
