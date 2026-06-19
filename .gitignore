@@ -260,7 +260,3 @@ paket-files/
 __pycache__/
 *.pyc
 /OldLoadingScreen/oldloadingscreen_nobox.assetbundle
-
-# Extracted (VRChat-owned) assets — do not commit
-/extracted/
-/web/assets/
