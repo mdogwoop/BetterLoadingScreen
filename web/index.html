@@ -8,27 +8,7 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
   #app { position: fixed; inset: 0; }
 
-  #overlay {
-    position: fixed; inset: 0; pointer-events: none;
-    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-    padding: 8vh 0; box-sizing: border-box;
-  }
-  #logo {
-    color: #cfefff; font-weight: 800; letter-spacing: .35em; font-size: clamp(22px, 4vw, 48px);
-    text-shadow: 0 0 18px rgba(90,180,255,.9), 0 0 40px rgba(40,120,255,.5);
-  }
-  #info {
-    color: #bfe6ff; font-size: clamp(12px, 1.6vw, 16px); letter-spacing: .08em; text-align: center;
-    text-shadow: 0 0 10px rgba(80,160,255,.7);
-  }
-  #bar { width: min(420px, 70vw); height: 4px; margin-top: 14px; border-radius: 4px;
-         background: rgba(120,180,255,.15); overflow: hidden; }
-  #bar > div { height: 100%; width: 35%; border-radius: 4px;
-         background: linear-gradient(90deg, #2a6cff, #7fd4ff);
-         box-shadow: 0 0 12px #4aa0ff; animation: load 2.4s ease-in-out infinite; }
-  @keyframes load { 0%{transform:translateX(-120%)} 100%{transform:translateX(320%)} }
-
-  #sound { pointer-events: auto; position: fixed; right: 16px; bottom: 16px;
+  #sound { position: fixed; right: 16px; bottom: 16px;
     background: rgba(20,40,70,.6); color: #cfefff; border: 1px solid rgba(120,180,255,.4);
     padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; backdrop-filter: blur(4px); }
   #sound:hover { background: rgba(40,80,140,.7); }
@@ -37,14 +17,7 @@
 <body>
 <div id="app"></div>
 
-<div id="overlay">
-  <div id="logo">V R C H A T</div>
-  <div>
-    <div id="info">Connecting to the warp tunnel…</div>
-    <div id="bar"><div></div></div>
-  </div>
-  <button id="sound">🔊 Enable sound</button>
-</div>
+<button id="sound">🔊 Enable sound</button>
 
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
