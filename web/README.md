@@ -6,10 +6,14 @@ original prefab (`Assets/Bundle/LoadingBackground.prefab`):
 
 | Original object | Web implementation |
 |-----------------|--------------------|
-| `SkyCube`       | Gradient sky sphere (`scene.background` stand-in) |
-| `Tunnel`        | Cylinder with scrolling additive glow texture |
-| `Stars`         | Points particle system streaking toward the camera |
+| `SkyCube`       | Inward-facing box textured with the extracted `Nebula-*` images (gradient sphere fallback) |
+| `Tunnel`        | Cylinder with scrolling additive `warp_tunnel_mask` texture |
+| `Stars`         | Points particle system using `Stars-010-Cyan`, streaking toward the camera |
+| `MenuMusic`     | `Scifi Loading Screen Loop 3.wav`, started via the "Enable sound" button |
 | `VRCLogo` / `LoadingInfoPanel` | HTML/CSS overlay |
+
+Each asset loads from `web/assets/` with a graceful fallback to a procedural
+stand-in, so the scene runs even when those (VRChat-owned) files are absent.
 
 ## Run it
 
@@ -24,16 +28,23 @@ python3 -m http.server 8000   # then open http://localhost:8000
 (A static server is recommended so the Three.js ES module CDN import resolves
 cleanly on all browsers.)
 
-## Getting 1:1 fidelity with the real assets
+## Supplying the real assets
 
-This prototype draws a procedural sky and tunnel so it runs with zero asset
-files. To match the original exactly:
+The textures and audio are VRChat property, so they are **not** committed here.
+Extract them yourself and drop them into `web/assets/`:
 
-1. Extract the textures from `OldLoadingScreen/loading.assetbundle` with
-   **AssetStudio** (filter Texture2D / Cubemap / Material; look for the `SkyCube`
-   material and tunnel texture).
-2. Replace the gradient sky with the real cubemap via
-   `new THREE.CubeTextureLoader().load([...6 faces])` assigned to
-   `scene.background`.
-3. Swap the procedurally generated `tunnelTex` canvas for the extracted tunnel
-   texture, and drop in the VRChat logo PNG for the overlay.
+```bash
+pip install UnityPy
+python3 web/extract_assets.py OldLoadingScreen/loading.assetbundle extracted
+cp extracted/textures/Nebula-*.png \
+   extracted/textures/warp_tunnel_mask.png \
+   extracted/textures/Stars-010-Cyan.png \
+   "extracted/audio/Scifi Loading Screen Loop 3.wav" \
+   web/assets/
+```
+
+The exact filenames the page looks for are listed in the `NEBULA`, `TUNNEL_TEX`,
+`STAR_TEX` and `MUSIC` constants near the top of the `index.html` script.
+
+Without these files everything still renders — the sky becomes a teal→black
+gradient, the tunnel uses a procedural streak texture, and audio is disabled.

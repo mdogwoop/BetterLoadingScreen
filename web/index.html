@@ -28,6 +28,12 @@
          background: linear-gradient(90deg, #2a6cff, #7fd4ff);
          box-shadow: 0 0 12px #4aa0ff; animation: load 2.4s ease-in-out infinite; }
   @keyframes load { 0%{transform:translateX(-120%)} 100%{transform:translateX(320%)} }
+
+  /* Sound enable button (browsers block audio autoplay until a user gesture) */
+  #sound { pointer-events: auto; position: fixed; right: 16px; bottom: 16px;
+    background: rgba(20,40,70,.6); color: #cfefff; border: 1px solid rgba(120,180,255,.4);
+    padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; backdrop-filter: blur(4px); }
+  #sound:hover { background: rgba(40,80,140,.7); }
 </style>
 </head>
 <body>
@@ -39,6 +45,7 @@
     <div id="info">Connecting to the warp tunnel…</div>
     <div id="bar"><div></div></div>
   </div>
+  <button id="sound">🔊 Enable sound</button>
 </div>
 
 <script type="importmap">
@@ -48,100 +55,149 @@
 <script type="module">
 import * as THREE from 'three';
 
-const app = document.getElementById('app');
+// ===========================================================================
+// Real assets extracted from loading.assetbundle live in ./assets/ .
+// Each one loads with a graceful fallback to a procedural stand-in, so the
+// scene still runs if the (VRChat-owned) files are absent.
+// ===========================================================================
+const BASE = './assets/';
+const NEBULA = [                                   // 6 faces of the SkyCube
+  'Nebula-001-CloudyBlue-Medium-03.png',
+  'Nebula-005-Bright-02-DarkMatter-BluePurplePink.png',
+  'Nebula-009-Bright-01-CloudyDarkMatterPinkPurple.png',
+  'Nebula-003-Bright-01-DarkMatterRed.png',
+  'Nebula-004-Bright-01-DarkMatterOrange.png',
+  'Nebula-004-Dark-02-DarkMatterOrange.png',
+];
+const TUNNEL_TEX = 'warp_tunnel_mask.png';
+const STAR_TEX   = 'Stars-010-Cyan.png';
+const MUSIC      = 'Scifi Loading Screen Loop 3.wav';
 
+const texLoader = new THREE.TextureLoader();
+const loadTex = (file) => new Promise((res) =>
+  texLoader.load(BASE + encodeURIComponent(file), (t) => res(t), undefined, () => res(null)));
+
+const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 0);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
 
 // ---------------------------------------------------------------------------
-// 1. Space background (stand-in for the SkyCube). Vertical teal->black gradient
-//    on a large inward-facing sphere. Swap this for a real cubemap extracted
-//    from loading.assetbundle via CubeTextureLoader if you want 1:1 fidelity.
+// 1. SkyCube — a big inward-facing box. Uses the extracted nebula textures on
+//    its 6 faces; falls back to a teal->black gradient sphere if absent.
 // ---------------------------------------------------------------------------
-const bgGeo = new THREE.SphereGeometry(500, 32, 32);
-const bgMat = new THREE.ShaderMaterial({
-  side: THREE.BackSide,
-  uniforms: { top: { value: new THREE.Color(0x06243a) }, bottom: { value: new THREE.Color(0x000008) } },
-  vertexShader: `varying vec3 vp; void main(){ vp = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
-  fragmentShader: `varying vec3 vp; uniform vec3 top; uniform vec3 bottom;
-    void main(){ float h = normalize(vp).y*0.5+0.5; gl_FragColor = vec4(mix(bottom, top, h),1.0);} `
-});
-scene.add(new THREE.Mesh(bgGeo, bgMat));
+let skybox;
+async function buildSky() {
+  const tex = await Promise.all(NEBULA.map(loadTex));
+  if (tex.every(Boolean)) {
+    const mats = tex.map((t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      return new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, fog: false });
+    });
+    skybox = new THREE.Mesh(new THREE.BoxGeometry(1200, 1200, 1200), mats);
+    scene.add(skybox);
+  } else {
+    const mat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: { top: { value: new THREE.Color(0x06243a) }, bottom: { value: new THREE.Color(0x000008) } },
+      vertexShader: `varying vec3 vp; void main(){ vp=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+      fragmentShader: `varying vec3 vp; uniform vec3 top; uniform vec3 bottom;
+        void main(){ float h=normalize(vp).y*0.5+0.5; gl_FragColor=vec4(mix(bottom,top,h),1.0);} `,
+    });
+    skybox = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 32), mat);
+    scene.add(skybox);
+  }
+}
 
 // ---------------------------------------------------------------------------
-// 2. Warp tunnel — a cylinder around the camera with a scrolling additive
-//    glow texture, the signature element of the old VRChat loading screen.
+// 2. Warp tunnel — cylinder around the camera, scrolling additive glow.
+//    Uses warp_tunnel_mask.png; falls back to a procedurally drawn streak map.
 // ---------------------------------------------------------------------------
-function makeTunnelTexture() {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
-  const g = c.getContext('2d');
-  g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256);
+function proceduralTunnelTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 70; i++) {
-    const x = Math.random() * 256, w = 1 + Math.random() * 3;
-    const a = 0.15 + Math.random() * 0.6;
+    const x = Math.random() * 256, w = 1 + Math.random() * 3, a = 0.15 + Math.random() * 0.6;
     const grd = g.createLinearGradient(x, 0, x, 256);
-    grd.addColorStop(0, `rgba(120,200,255,0)`);
-    grd.addColorStop(0.5, `rgba(120,200,255,${a})`);
-    grd.addColorStop(1, `rgba(120,200,255,0)`);
+    grd.addColorStop(0, 'rgba(120,200,255,0)'); grd.addColorStop(0.5, `rgba(120,200,255,${a})`);
+    grd.addColorStop(1, 'rgba(120,200,255,0)');
     g.fillStyle = grd; g.fillRect(x, 0, w, 256);
   }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(6, 2);
-  return t;
+  return new THREE.CanvasTexture(c);
 }
-const tunnelTex = makeTunnelTexture();
+let tunnelTex;                                       // whichever map is active (gets scrolled)
 const tunnel = new THREE.Mesh(
   new THREE.CylinderGeometry(14, 14, 600, 48, 1, true),
-  new THREE.MeshBasicMaterial({ map: tunnelTex, side: THREE.BackSide, transparent: true,
-    blending: THREE.AdditiveBlending, color: 0x4aa0ff, depthWrite: false })
-);
-tunnel.rotation.x = Math.PI / 2;           // align the cylinder down the -Z view axis
+  new THREE.MeshBasicMaterial({ side: THREE.BackSide, transparent: true,
+    blending: THREE.AdditiveBlending, color: 0x4aa0ff, depthWrite: false }));
+tunnel.rotation.x = Math.PI / 2;
 tunnel.position.z = -250;
 scene.add(tunnel);
 
+async function buildTunnel() {
+  tunnelTex = (await loadTex(TUNNEL_TEX)) || proceduralTunnelTex();
+  tunnelTex.wrapS = tunnelTex.wrapT = THREE.RepeatWrapping;
+  tunnelTex.repeat.set(6, 2);
+  tunnel.material.map = tunnelTex;
+  tunnel.material.needsUpdate = true;
+}
+
 // ---------------------------------------------------------------------------
-// 3. Warp starfield — points streaking toward the camera (the "Stars" object).
+// 3. Warp starfield — points streaking toward the camera. Uses Stars-010-Cyan
+//    as the sprite if present (just a brighter default dot otherwise).
 // ---------------------------------------------------------------------------
 const STAR_COUNT = 1200, RANGE = 600;
 const positions = new Float32Array(STAR_COUNT * 3);
 function resetStar(i, full) {
   const r = 2 + Math.random() * 11, a = Math.random() * Math.PI * 2;
-  positions[i*3]   = Math.cos(a) * r;
-  positions[i*3+1] = Math.sin(a) * r;
+  positions[i*3] = Math.cos(a) * r; positions[i*3+1] = Math.sin(a) * r;
   positions[i*3+2] = full ? -Math.random() * RANGE : -RANGE;
 }
 for (let i = 0; i < STAR_COUNT; i++) resetStar(i, true);
 const starGeo = new THREE.BufferGeometry();
 starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-const stars = new THREE.Points(starGeo,
-  new THREE.PointsMaterial({ color: 0xbfe6ff, size: 0.6, transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false }));
+const starMat = new THREE.PointsMaterial({ color: 0xbfe6ff, size: 1.0, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false });
+const stars = new THREE.Points(starGeo, starMat);
 scene.add(stars);
+loadTex(STAR_TEX).then((t) => { if (t) { starMat.map = t; starMat.size = 3; starMat.needsUpdate = true; } });
 
 // ---------------------------------------------------------------------------
-// Animation loop
+// Audio — Scifi loading loop. Started on first user gesture (autoplay policy).
 // ---------------------------------------------------------------------------
+const soundBtn = document.getElementById('sound');
+const music = new Audio(BASE + encodeURIComponent(MUSIC));
+music.loop = true; music.volume = 0.6;
+soundBtn.addEventListener('click', () => {
+  if (music.paused) { music.play().then(() => soundBtn.textContent = '🔈 Mute')
+    .catch(() => soundBtn.textContent = '⚠ no audio file'); }
+  else { music.pause(); soundBtn.textContent = '🔊 Enable sound'; }
+});
+
+// ---------------------------------------------------------------------------
+// Boot + animation loop
+// ---------------------------------------------------------------------------
+await Promise.all([buildSky(), buildTunnel()]);
+
 const clock = new THREE.Clock();
 function animate() {
   const dt = clock.getDelta();
-  tunnelTex.offset.y -= dt * 0.9;          // scroll the tunnel walls toward you
-  tunnel.rotation.y += dt * 0.15;          // slow swirl
+  if (tunnelTex) tunnelTex.offset.y -= dt * 0.9;     // scroll tunnel walls toward you
+  tunnel.rotation.y += dt * 0.15;
+  if (skybox) skybox.rotation.y += dt * 0.006;       // very slow drift of the sky
 
   const speed = 160 * dt;
   for (let i = 0; i < STAR_COUNT; i++) {
-    positions[i*3+2] += speed;             // move stars toward the camera (+Z)
+    positions[i*3+2] += speed;
     if (positions[i*3+2] > 0) resetStar(i, false);
   }
   starGeo.attributes.position.needsUpdate = true;
 
-  camera.rotation.z += dt * 0.05;          // gentle roll, sells the "flight"
+  camera.rotation.z += dt * 0.05;                    // gentle roll, sells the flight
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }

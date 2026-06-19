@@ -263,3 +263,4 @@ __pycache__/
 
 # Extracted (VRChat-owned) assets — do not commit
 /extracted/
+/web/assets/
