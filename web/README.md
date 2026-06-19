@@ -10,7 +10,7 @@ original prefab (`Assets/Bundle/LoadingBackground.prefab`):
 | Nebula clouds   | `Nebula-*` images as additive sprite billboards (black = transparent) around the front hemisphere |
 | `Tunnel`        | Cylinder with a dim, scrolling additive `warp_tunnel_mask` texture |
 | `Stars`         | Points streaking toward the camera, using the soft round `Default-Particle` sprite |
-| `MenuMusic`     | `Scifi Loading Screen Loop 3.wav`, started via the "Enable sound" button |
+| `MenuMusic`     | `PartiallyOffline.wav`, started via the "Enable sound" button |
 | `VRCLogo` / `LoadingInfoPanel` | HTML/CSS overlay |
 
 Note on textures: `Stars-010-Cyan` is a *tileable starfield image*, not a point

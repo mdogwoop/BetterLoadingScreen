@@ -192,7 +192,7 @@ function placeStar(i, full) {
 for (let i = 0; i < STAR_COUNT; i++) placeStar(i, true);
 const starGeo = new THREE.BufferGeometry();
 starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-const starMat = new THREE.PointsMaterial({ color: 0xeaf4ff, size: 2.2, sizeAttenuation: false,
+const starMat = new THREE.PointsMaterial({ color: 0xeaf4ff, size: 4.5, sizeAttenuation: false,
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false });
 const stars = new THREE.Points(starGeo, starMat);
 scene.add(stars);
@@ -201,10 +201,10 @@ loadTex('Default-Particle.png').then((t) => {
 });
 
 // ---------------------------------------------------------------------------
-// Audio — Scifi loading loop, started on first user gesture (autoplay policy).
+// Audio — PartiallyOffline loop, started on first user gesture (autoplay policy).
 // ---------------------------------------------------------------------------
 const soundBtn = document.getElementById('sound');
-const music = new Audio(BASE + encodeURIComponent('Scifi Loading Screen Loop 3.wav'));
+const music = new Audio(BASE + encodeURIComponent('PartiallyOffline.wav'));
 music.loop = true; music.volume = 0.6;
 soundBtn.addEventListener('click', () => {
   if (music.paused) { music.play().then(() => soundBtn.textContent = '🔈 Mute')
