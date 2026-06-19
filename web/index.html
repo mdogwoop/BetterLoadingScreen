@@ -250,7 +250,7 @@ async function buildTunnel() {
 //    sparse, each with its own length, brightness (mostly dim) and a random
 //    colour between pink-purple and cyan (the real startColor range).
 // ---------------------------------------------------------------------------
-const STAR_COUNT = 300, DEPTH = 1100, SPREAD = 320, MIN_R = 18, STREAK = 13;
+const STAR_COUNT = 300, DEPTH = 1100, SPREAD = 320, MIN_R = 18, STREAK = 5;
 const linePos = new Float32Array(STAR_COUNT * 6);   // 2 verts (head, tail) per star
 const lineCol = new Float32Array(STAR_COUNT * 6);
 const speeds = new Float32Array(STAR_COUNT);
