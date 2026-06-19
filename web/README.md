@@ -23,16 +23,16 @@ stand-in, so the scene runs even when those (VRChat-owned) files are absent.
 
 ## Run it
 
-It's a single file with no build step. Open `web/index.html` directly in a
-browser, or serve the folder:
+It's a single file with no build step. Three.js and OBJLoader are vendored under
+`web/vendor/`, so it loads fully offline with no CDN dependency. Serve the folder:
 
 ```bash
 cd web
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-(A static server is recommended so the Three.js ES module CDN import resolves
-cleanly on all browsers.)
+(A static server is needed so the ES module imports and the `.obj`/texture fetches
+resolve; opening the file directly via `file://` is blocked by browser CORS.)
 
 ## Supplying the real assets
 

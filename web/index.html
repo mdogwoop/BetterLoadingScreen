@@ -47,12 +47,12 @@
 </div>
 
 <script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+{ "imports": { "three": "./vendor/three.module.js" } }
 </script>
 
 <script type="module">
 import * as THREE from 'three';
-import { OBJLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/OBJLoader.js';
+import { OBJLoader } from './vendor/jsm/loaders/OBJLoader.js';
 
 // ===========================================================================
 // Assets extracted from loading.assetbundle (web/assets/). Each loads with a
