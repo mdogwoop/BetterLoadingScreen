@@ -8,7 +8,6 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
   #app { position: fixed; inset: 0; }
 
-  /* --- Overlay UI (logo + loading text), mirrors VRCLogo + LoadingInfoPanel --- */
   #overlay {
     position: fixed; inset: 0; pointer-events: none;
     display: flex; flex-direction: column; align-items: center; justify-content: space-between;
@@ -29,7 +28,6 @@
          box-shadow: 0 0 12px #4aa0ff; animation: load 2.4s ease-in-out infinite; }
   @keyframes load { 0%{transform:translateX(-120%)} 100%{transform:translateX(320%)} }
 
-  /* Sound enable button (browsers block audio autoplay until a user gesture) */
   #sound { pointer-events: auto; position: fixed; right: 16px; bottom: 16px;
     background: rgba(20,40,70,.6); color: #cfefff; border: 1px solid rgba(120,180,255,.4);
     padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; backdrop-filter: blur(4px); }
@@ -56,23 +54,16 @@
 import * as THREE from 'three';
 
 // ===========================================================================
-// Real assets extracted from loading.assetbundle live in ./assets/ .
-// Each one loads with a graceful fallback to a procedural stand-in, so the
-// scene still runs if the (VRChat-owned) files are absent.
+// Assets extracted from loading.assetbundle (web/assets/). Each loads with a
+// graceful fallback so the scene still runs if a (VRChat-owned) file is absent.
+//
+// Layering, matching the real loading screen:
+//   Stars-010-Cyan.png   -> the deep starfield, mapped onto a background sphere
+//   Nebula-*.png         -> coloured cloud billboards, ADDITIVE (black = clear)
+//   Default-Particle.png -> soft round sprite for the fine stars flying past
+//   warp_tunnel_mask.png -> faint scrolling streaks down the view axis
 // ===========================================================================
 const BASE = './assets/';
-const NEBULA = [                                   // 6 faces of the SkyCube
-  'Nebula-001-CloudyBlue-Medium-03.png',
-  'Nebula-005-Bright-02-DarkMatter-BluePurplePink.png',
-  'Nebula-009-Bright-01-CloudyDarkMatterPinkPurple.png',
-  'Nebula-003-Bright-01-DarkMatterRed.png',
-  'Nebula-004-Bright-01-DarkMatterOrange.png',
-  'Nebula-004-Dark-02-DarkMatterOrange.png',
-];
-const TUNNEL_TEX = 'warp_tunnel_mask.png';
-const STAR_TEX   = 'Stars-010-Cyan.png';
-const MUSIC      = 'Scifi Loading Screen Loop 3.wav';
-
 const texLoader = new THREE.TextureLoader();
 const loadTex = (file) => new Promise((res) =>
   texLoader.load(BASE + encodeURIComponent(file), (t) => res(t), undefined, () => res(null)));
@@ -84,93 +75,131 @@ renderer.setSize(innerWidth, innerHeight);
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 3000);
 
 // ---------------------------------------------------------------------------
-// 1. SkyCube — a big inward-facing box. Uses the extracted nebula textures on
-//    its 6 faces; falls back to a teal->black gradient sphere if absent.
+// 1. Starfield sky — the tileable Stars-010-Cyan texture on a big inward sphere.
 // ---------------------------------------------------------------------------
-let skybox;
+let sky;
 async function buildSky() {
-  const tex = await Promise.all(NEBULA.map(loadTex));
-  if (tex.every(Boolean)) {
-    const mats = tex.map((t) => {
-      t.colorSpace = THREE.SRGBColorSpace;
-      return new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, fog: false });
-    });
-    skybox = new THREE.Mesh(new THREE.BoxGeometry(1200, 1200, 1200), mats);
-    scene.add(skybox);
+  const star = await loadTex('Stars-010-Cyan.png');
+  let mat;
+  if (star) {
+    star.colorSpace = THREE.SRGBColorSpace;
+    star.wrapS = star.wrapT = THREE.RepeatWrapping;
+    star.repeat.set(2, 1);
+    mat = new THREE.MeshBasicMaterial({ map: star, side: THREE.BackSide, fog: false });
   } else {
-    const mat = new THREE.ShaderMaterial({
+    mat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
-      uniforms: { top: { value: new THREE.Color(0x06243a) }, bottom: { value: new THREE.Color(0x000008) } },
+      uniforms: { top: { value: new THREE.Color(0x0b2238) }, bottom: { value: new THREE.Color(0x01010a) } },
       vertexShader: `varying vec3 vp; void main(){ vp=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
       fragmentShader: `varying vec3 vp; uniform vec3 top; uniform vec3 bottom;
         void main(){ float h=normalize(vp).y*0.5+0.5; gl_FragColor=vec4(mix(bottom,top,h),1.0);} `,
     });
-    skybox = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 32), mat);
-    scene.add(skybox);
+  }
+  sky = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 48), mat);
+  scene.add(sky);
+}
+
+// ---------------------------------------------------------------------------
+// 2. Nebula clouds — additive billboards scattered across the front hemisphere,
+//    biased downward to echo the real screen's orange clouds near the bottom.
+// ---------------------------------------------------------------------------
+async function buildNebulae() {
+  const files = {
+    orange: 'Nebula-004-Bright-01-DarkMatterOrange.png',
+    orange2: 'Nebula-004-Dark-02-DarkMatterOrange.png',
+    purple: 'Nebula-005-Bright-02-DarkMatter-BluePurplePink.png',
+    blue:   'Nebula-001-CloudyBlue-Medium-03.png',
+    pink:   'Nebula-009-Bright-01-CloudyDarkMatterPinkPurple.png',
+    red:    'Nebula-003-Bright-01-DarkMatterRed.png',
+  };
+  const tex = {};
+  await Promise.all(Object.entries(files).map(async ([k, f]) => { tex[k] = await loadTex(f); }));
+
+  // [texture key, direction, scale, opacity, texture-rotation]
+  const clouds = [
+    ['orange',  [ 0.25, -0.65, -0.72], 820, 0.85, 0.2],
+    ['orange2', [-0.55, -0.45, -0.70], 620, 0.7,  1.7],
+    ['red',     [ 0.70, -0.20, -0.65], 480, 0.6,  2.6],
+    ['purple',  [ 0.55,  0.25, -0.75], 560, 0.7,  0.6],
+    ['pink',    [-0.10,  0.45, -0.85], 520, 0.6,  3.3],
+    ['blue',    [-0.55,  0.35, -0.72], 460, 0.55, 1.1],
+  ];
+  for (const [key, dir, scale, opacity, rot] of clouds) {
+    const t = tex[key];
+    if (!t) continue;
+    t.colorSpace = THREE.SRGBColorSpace;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: t, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+      opacity, rotation: rot, transparent: true,
+    }));
+    spr.position.set(...dir).normalize().multiplyScalar(760);
+    spr.scale.set(scale, scale, 1);
+    scene.add(spr);
   }
 }
 
 // ---------------------------------------------------------------------------
-// 2. Warp tunnel — cylinder around the camera, scrolling additive glow.
-//    Uses warp_tunnel_mask.png; falls back to a procedurally drawn streak map.
+// 3. Warp tunnel — faint scrolling streaks down the view axis (subtle in the
+//    real screen, so kept dim). warp_tunnel_mask falls back to a streak canvas.
 // ---------------------------------------------------------------------------
 function proceduralTunnelTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 70; i++) {
-    const x = Math.random() * 256, w = 1 + Math.random() * 3, a = 0.15 + Math.random() * 0.6;
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * 256, w = 1 + Math.random() * 3, a = 0.1 + Math.random() * 0.4;
     const grd = g.createLinearGradient(x, 0, x, 256);
-    grd.addColorStop(0, 'rgba(120,200,255,0)'); grd.addColorStop(0.5, `rgba(120,200,255,${a})`);
-    grd.addColorStop(1, 'rgba(120,200,255,0)');
+    grd.addColorStop(0, 'rgba(150,200,255,0)'); grd.addColorStop(0.5, `rgba(150,200,255,${a})`);
+    grd.addColorStop(1, 'rgba(150,200,255,0)');
     g.fillStyle = grd; g.fillRect(x, 0, w, 256);
   }
   return new THREE.CanvasTexture(c);
 }
-let tunnelTex;                                       // whichever map is active (gets scrolled)
+let tunnelTex;
 const tunnel = new THREE.Mesh(
-  new THREE.CylinderGeometry(14, 14, 600, 48, 1, true),
+  new THREE.CylinderGeometry(16, 16, 700, 48, 1, true),
   new THREE.MeshBasicMaterial({ side: THREE.BackSide, transparent: true,
-    blending: THREE.AdditiveBlending, color: 0x4aa0ff, depthWrite: false }));
+    blending: THREE.AdditiveBlending, color: 0x16385f, depthWrite: false }));
 tunnel.rotation.x = Math.PI / 2;
-tunnel.position.z = -250;
+tunnel.position.z = -300;
 scene.add(tunnel);
 
 async function buildTunnel() {
-  tunnelTex = (await loadTex(TUNNEL_TEX)) || proceduralTunnelTex();
+  tunnelTex = (await loadTex('warp_tunnel_mask.png')) || proceduralTunnelTex();
   tunnelTex.wrapS = tunnelTex.wrapT = THREE.RepeatWrapping;
-  tunnelTex.repeat.set(6, 2);
+  tunnelTex.repeat.set(4, 2);
   tunnel.material.map = tunnelTex;
   tunnel.material.needsUpdate = true;
 }
 
 // ---------------------------------------------------------------------------
-// 3. Warp starfield — points streaking toward the camera. Uses Stars-010-Cyan
-//    as the sprite if present (just a brighter default dot otherwise).
+// 4. Fine stars flying toward the camera — soft round Default-Particle sprites.
 // ---------------------------------------------------------------------------
-const STAR_COUNT = 1200, RANGE = 600;
+const STAR_COUNT = 700, RANGE = 700;
 const positions = new Float32Array(STAR_COUNT * 3);
 function resetStar(i, full) {
-  const r = 2 + Math.random() * 11, a = Math.random() * Math.PI * 2;
+  const r = 3 + Math.random() * 16, a = Math.random() * Math.PI * 2;
   positions[i*3] = Math.cos(a) * r; positions[i*3+1] = Math.sin(a) * r;
   positions[i*3+2] = full ? -Math.random() * RANGE : -RANGE;
 }
 for (let i = 0; i < STAR_COUNT; i++) resetStar(i, true);
 const starGeo = new THREE.BufferGeometry();
 starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-const starMat = new THREE.PointsMaterial({ color: 0xbfe6ff, size: 1.0, transparent: true,
-  blending: THREE.AdditiveBlending, depthWrite: false });
+const starMat = new THREE.PointsMaterial({ color: 0xdfeeff, size: 2.4, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
 const stars = new THREE.Points(starGeo, starMat);
 scene.add(stars);
-loadTex(STAR_TEX).then((t) => { if (t) { starMat.map = t; starMat.size = 3; starMat.needsUpdate = true; } });
+loadTex('Default-Particle.png').then((t) => {
+  if (t) { starMat.map = t; starMat.alphaTest = 0.01; starMat.needsUpdate = true; }
+});
 
 // ---------------------------------------------------------------------------
-// Audio — Scifi loading loop. Started on first user gesture (autoplay policy).
+// Audio — Scifi loading loop, started on first user gesture (autoplay policy).
 // ---------------------------------------------------------------------------
 const soundBtn = document.getElementById('sound');
-const music = new Audio(BASE + encodeURIComponent(MUSIC));
+const music = new Audio(BASE + encodeURIComponent('Scifi Loading Screen Loop 3.wav'));
 music.loop = true; music.volume = 0.6;
 soundBtn.addEventListener('click', () => {
   if (music.paused) { music.play().then(() => soundBtn.textContent = '🔈 Mute')
@@ -181,23 +210,23 @@ soundBtn.addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 // Boot + animation loop
 // ---------------------------------------------------------------------------
-await Promise.all([buildSky(), buildTunnel()]);
+await Promise.all([buildSky(), buildNebulae(), buildTunnel()]);
 
 const clock = new THREE.Clock();
 function animate() {
   const dt = clock.getDelta();
-  if (tunnelTex) tunnelTex.offset.y -= dt * 0.9;     // scroll tunnel walls toward you
-  tunnel.rotation.y += dt * 0.15;
-  if (skybox) skybox.rotation.y += dt * 0.006;       // very slow drift of the sky
+  if (tunnelTex) tunnelTex.offset.y -= dt * 0.7;     // scroll streaks toward you
+  tunnel.rotation.y += dt * 0.12;
+  if (sky) sky.rotation.y += dt * 0.004;             // very slow drift of the sky
 
-  const speed = 160 * dt;
+  const speed = 150 * dt;
   for (let i = 0; i < STAR_COUNT; i++) {
     positions[i*3+2] += speed;
     if (positions[i*3+2] > 0) resetStar(i, false);
   }
   starGeo.attributes.position.needsUpdate = true;
 
-  camera.rotation.z += dt * 0.05;                    // gentle roll, sells the flight
+  camera.rotation.z += dt * 0.03;                    // gentle roll, sells the flight
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }

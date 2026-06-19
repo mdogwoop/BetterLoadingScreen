@@ -6,11 +6,17 @@ original prefab (`Assets/Bundle/LoadingBackground.prefab`):
 
 | Original object | Web implementation |
 |-----------------|--------------------|
-| `SkyCube`       | Inward-facing box textured with the extracted `Nebula-*` images (gradient sphere fallback) |
-| `Tunnel`        | Cylinder with scrolling additive `warp_tunnel_mask` texture |
-| `Stars`         | Points particle system using `Stars-010-Cyan`, streaking toward the camera |
+| `SkyCube`       | Background sphere mapped with the tileable `Stars-010-Cyan` starfield (gradient fallback) |
+| Nebula clouds   | `Nebula-*` images as additive sprite billboards (black = transparent) around the front hemisphere |
+| `Tunnel`        | Cylinder with a dim, scrolling additive `warp_tunnel_mask` texture |
+| `Stars`         | Points streaking toward the camera, using the soft round `Default-Particle` sprite |
 | `MenuMusic`     | `Scifi Loading Screen Loop 3.wav`, started via the "Enable sound" button |
 | `VRCLogo` / `LoadingInfoPanel` | HTML/CSS overlay |
+
+Note on textures: `Stars-010-Cyan` is a *tileable starfield image*, not a point
+sprite, and the `Nebula-*` files are black-background clouds meant for additive
+blending — using them the wrong way (e.g. a star tile as a `Points` sprite)
+renders as scattered translucent squares rather than a smooth sky.
 
 Each asset loads from `web/assets/` with a graceful fallback to a procedural
 stand-in, so the scene runs even when those (VRChat-owned) files are absent.
@@ -39,12 +45,14 @@ python3 web/extract_assets.py OldLoadingScreen/loading.assetbundle extracted
 cp extracted/textures/Nebula-*.png \
    extracted/textures/warp_tunnel_mask.png \
    extracted/textures/Stars-010-Cyan.png \
+   extracted/textures/Default-Particle.png \
    "extracted/audio/Scifi Loading Screen Loop 3.wav" \
    web/assets/
 ```
 
-The exact filenames the page looks for are listed in the `NEBULA`, `TUNNEL_TEX`,
-`STAR_TEX` and `MUSIC` constants near the top of the `index.html` script.
+The exact filenames the page looks for are listed in the `buildSky`,
+`buildNebulae`, `buildTunnel` and star-sprite sections near the top of the
+`index.html` script.
 
 Without these files everything still renders — the sky becomes a teal→black
 gradient, the tunnel uses a procedural streak texture, and audio is disabled.
