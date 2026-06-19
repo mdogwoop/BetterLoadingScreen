@@ -173,7 +173,7 @@ const tunnelUniforms = {
   map:      { value: null },
   uTime:    { value: 0 },
   uPan:     { value: new THREE.Vector2(0.105, 0.52) },   // _U/_V_TileAnimFactor
-  uSpeed:   { value: 1.0 },                              // overall pan rate
+  uSpeed:   { value: -1.0 },                             // _Speed is negative -> reverse dir
   uColor:   { value: new THREE.Color(0x14bbff) },        // node_6523 rgb(0.08,0.73,1.0)
   uOpacity: { value: 1.6 },                              // _Opacity 0.157, scaled up for additive
   uFade:    { value: new THREE.Vector2(40.0, 900.0) },   // dark-centre distance fade (~_MaxFade)
@@ -243,7 +243,7 @@ function placeStar(i, full) {
   positions[i*3+1] = Math.sin(a) * r;
   positions[i*3+2] = full ? -Math.random() * DEPTH : -DEPTH;
   if (full) {                                             // set once; constant per star
-    speeds[i]  = 0.7 + Math.random() * 0.6;
+    speeds[i]  = 0.4 + Math.random() * 1.0;              // wide spread, like startSpeed 5-75
     aSize[i]   = 2.0 + Math.random() * 4.0;               // varied pixel size
     aBright[i] = Math.pow(Math.random(), 2.2);            // mostly dim, a few bright
   }
@@ -292,12 +292,12 @@ soundBtn.addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 await Promise.all([buildSky(), buildNebulae(), buildTunnel()]);
 
-const STAR_SPEED = 240;
+const STAR_SPEED = 90;   // ~13s to cross DEPTH, matching the real startLifetime
 const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   tunnelUniforms.uTime.value += dt;                    // pans the mask down the tube
-  if (tunnel) tunnel.rotateOnWorldAxis(VIEW_AXIS, dt * 0.05);   // gentle swirl (F3DWarpTunnel)
+  if (tunnel) tunnel.rotateOnWorldAxis(VIEW_AXIS, dt * 0.03);   // gentle swirl (F3DWarpTunnel)
 
   for (let i = 0; i < STAR_COUNT; i++) {
     positions[i*3+2] += STAR_SPEED * speeds[i] * dt;   // fly toward the camera
