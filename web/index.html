@@ -158,27 +158,26 @@ function proceduralTunnelTex() {
   return new THREE.CanvasTexture(c);
 }
 // Recreation of the FORGE3D/WarpTunnel shader used by the real screen. The mask
-// texture is sampled on TWO animated UV layers down a cylinder the camera sits
-// inside: one scrolls straight (the pale background streaks), the other scrolls
-// the opposite way with a sine wiggle in U (the curved blue spiralling streaks).
-// Two different rates make it read as random — never perfectly repeating — and a
-// view-distance fade darkens the far end into the central hole. Parameters are
-// seeded from the extracted material (warp_tunnel_001): _V_TileAnimFactor 0.52,
-// _V_TileAnimFactor_copy -0.19, _U_TileAnimFactor 0.105, _Wiggle/_WiggleDist,
-// node colour rgb(0.08,0.73,1.0).
+// texture (its streaks mapped ALONG the tube so they read as radial rays) is
+// sampled on TWO animated layers down a cylinder the camera sits inside, both
+// flowing toward you at different rates so it never perfectly repeats:
+//   A) pale straight radial streaks  — the bright background rays
+//   B) a faster layer with a small angular wiggle — the curved blue filaments
+//      near the centre
+// pow() sharpens both into distinct streaks; a view-distance fade darkens the
+// far end into the central hole. Colour rgb(0.08,0.73,1.0) from the material.
 const tunnelUniforms = {
   map:         { value: null },
   uTime:       { value: 0 },
-  uSpeed:      { value: 0.55 },                          // master scroll rate
-  uVfacA:      { value: 0.52 },                          // straight layer
-  uVfacB:      { value: -0.19 },                         // curved layer (opposite)
-  uUfac:       { value: 0.105 },                         // slow U drift
-  uWiggleFreq: { value: 7.0 },
-  uWiggleAmp:  { value: 0.16 },
-  uTiles:      { value: new THREE.Vector2(3.0, 2.4) },   // around, along
-  uColA:       { value: new THREE.Color(0x9ec7ee) },     // pale straight background
-  uColB:       { value: new THREE.Color(0x16bcff) },     // blue curved spiral
-  uOpacity:    { value: 0.6 },
+  uSpeed:      { value: 0.5 },                            // master scroll rate
+  uVfacA:      { value: 0.5 },                            // background layer rate
+  uVfacB:      { value: 0.31 },                           // accent layer rate (SAME dir)
+  uWiggleFreq: { value: 4.0 },
+  uWiggleAmp:  { value: 0.05 },                           // small angular bend, not rings
+  uTiles:      { value: new THREE.Vector2(2.0, 6.0) },   // along length, around
+  uColA:       { value: new THREE.Color(0xb8d4f0) },     // pale radial background streaks
+  uColB:       { value: new THREE.Color(0x18bcff) },     // bright blue accent filaments
+  uOpacity:    { value: 0.95 },
   uFadeStart:  { value: 70.0 },
   uFadeEnd:    { value: 560.0 },
 };
@@ -197,20 +196,26 @@ const tunnel = new THREE.Mesh(
       }`,
     fragmentShader: `
       uniform sampler2D map;
-      uniform float uTime,uSpeed,uVfacA,uVfacB,uUfac,uWiggleFreq,uWiggleAmp,uOpacity,uFadeStart,uFadeEnd;
+      uniform float uTime,uSpeed,uVfacA,uVfacB,uWiggleFreq,uWiggleAmp,uOpacity,uFadeStart,uFadeEnd;
       uniform vec2 uTiles; uniform vec3 uColA,uColB;
       varying vec2 vUv; varying float vDist;
       void main(){
-        vec2 uv = vUv * uTiles;
+        // Sample so the mask's streaks run ALONG the tube length -> radial rays
+        // from the centre (not rings). x = length (scrolls toward you), y = angle.
+        float len = vUv.y;     // 0..1 along the tube
+        float ang = vUv.x;     // 0..1 around the tube
         float t = uTime * uSpeed;
-        // straight layer — pale background streaks flying toward you
-        vec2 uvA = vec2(uv.x + uUfac * t, uv.y + uVfacA * t);
-        // curved layer — sine wiggle in U bends the streaks into spirals
-        float w = sin(uv.y * uWiggleFreq + uTime * 1.3) * uWiggleAmp;
-        vec2 uvB = vec2(uv.x + w, uv.y + uVfacB * t);
-        float a = texture2D(map, uvA).r;
-        float b = texture2D(map, uvB).r;
-        vec3 col = uColA * a * 0.8 + uColB * b;
+
+        // background layer: straight radial streaks
+        vec2 uvA = vec2((len + uVfacA * t) * uTiles.x, ang * uTiles.y);
+        // accent layer: same direction, faster, with a small angular wiggle that
+        // bends some streaks -> the curved bright-blue filaments near the centre
+        float wig = sin(len * uWiggleFreq + uTime * 1.1) * uWiggleAmp;
+        vec2 uvB = vec2((len + uVfacB * t) * uTiles.x * 1.3, (ang + wig) * uTiles.y);
+
+        float a = pow(texture2D(map, uvA).r, 1.7);   // sharpen into distinct streaks
+        float b = pow(texture2D(map, uvB).r, 2.4);
+        vec3 col = uColA * a + uColB * b * 1.6;
         float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, vDist);
         gl_FragColor = vec4(col * uOpacity * fade, 1.0);   // additive
       }`,
@@ -276,7 +281,7 @@ const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   tunnelUniforms.uTime.value += dt;                    // drives the two scroll layers + wiggle
-  tunnel.rotateOnWorldAxis(VIEW_AXIS, dt * 0.1);       // slow vortex swirl (F3DWarpTunnel)
+  tunnel.rotateOnWorldAxis(VIEW_AXIS, dt * 0.04);      // gentle vortex swirl (F3DWarpTunnel)
 
   for (let i = 0; i < STAR_COUNT; i++) {
     positions[i*3+2] += STAR_SPEED * speeds[i] * dt;   // fly toward the camera
