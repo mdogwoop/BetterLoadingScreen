@@ -231,7 +231,7 @@ async function buildTunnel() {
   const layers = [
     { mat: { map: mask,   pan: new THREE.Vector2(0.105, 0.52), speed: -0.5, color: 0x14bbff, opacity: 1.4, phase: 0,   mode: 0 }, cross: 0.213, rot: 0.0 },
     { mat: { map: mask,   pan: new THREE.Vector2(0.105, 0.52), speed: -0.5, color: 0x86d2ff, opacity: 0.8, phase: 4.7, mode: 0 }, cross: 0.205, rot: 0.9 },
-    { mat: { map: normal || mask, pan: new THREE.Vector2(-0.09, -0.88), speed: -0.4, color: 0xbfe6ff, opacity: 0.6, phase: 2.0, mode: normal ? 1 : 0 }, cross: 0.23, rot: -0.5 },
+    { mat: { map: normal || mask, pan: new THREE.Vector2(-0.09, -0.88), speed: 0.4, color: 0xbfe6ff, opacity: 0.6, phase: 2.0, mode: normal ? 1 : 0 }, cross: 0.23, rot: -0.5 },
   ];
   for (const L of layers) {
     const mat = makeTunnelMat(L.mat);
