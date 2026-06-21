@@ -263,3 +263,9 @@ __pycache__/
 
 # Web demo needs this mesh tracked despite the global *.obj rule
 !web/assets/*.obj
+!public/assets/*.obj
+
+# Cloudflare Wrangler
+.wrangler/
+.dev.vars
+wrangler.toml.bak
