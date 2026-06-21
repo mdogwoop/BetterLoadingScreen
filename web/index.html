@@ -3,21 +3,157 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>BetterLoadingScreen — Web Recreation</title>
+<title>mdog的生日会</title>
+
+<!-- Open Graph / Twitter card — Discord & Telegram render these into a rich
+     embed when the link is shared. The Worker rewrites og:url / og:image to
+     absolute URLs at request time so the preview image loads. -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="mdog的生日会" />
+<meta property="og:title" content="mdog的生日会" />
+<meta property="og:description" content="这里有一个来自mdog的传送门，快来看看" />
+<meta property="og:image" content="./assets/birthday.png" />
+<meta property="og:image:width" content="772" />
+<meta property="og:image:height" content="579" />
+<meta property="og:url" content="./" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="mdog的生日会" />
+<meta name="twitter:description" content="这里有一个来自mdog的传送门，快来看看" />
+<meta name="twitter:image" content="./assets/birthday.png" />
+<meta name="theme-color" content="#0a1018" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Emoji:wght@400..700&display=swap" rel="stylesheet">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
   #app { position: fixed; inset: 0; }
 
-  #sound { position: fixed; right: 16px; bottom: 16px;
-    background: rgba(20,40,70,.6); color: #cfefff; border: 1px solid rgba(120,180,255,.4);
-    padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; backdrop-filter: blur(4px); }
-  #sound:hover { background: rgba(40,80,140,.7); }
+  .btnrow { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+  #sound { display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(10,40,48,.65); color: #d7f6fb; border: 1px solid rgba(56,195,214,.55);
+    padding: 9px 14px; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  #sound .ic { font-family: 'Noto Emoji', sans-serif; font-size: 16px; line-height: 1; color: #d7f6fb; }
+  #sound:hover { background: rgba(20,70,82,.8); }
+
+  /* ---- "Traveling to" loading panel, centred (matches the VRChat overlay) ---- */
+  #panel { position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(var(--s, 1)); transform-origin: center;
+    display: flex; gap: 18px; align-items: stretch; box-sizing: border-box;
+    padding: 16px; border-radius: 14px;
+    background: rgba(10, 16, 24, .82); box-shadow: 0 6px 28px rgba(0,0,0,.45);
+    font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+    color: #fff; user-select: none; backdrop-filter: blur(2px); }
+  #thumb { width: 156px; height: 120px; border-radius: 9px; flex: none;
+    background: #1a1f28 center/cover no-repeat;
+    background-image: url('./assets/birthday.png');
+    position: relative; overflow: hidden; }
+  #thumb .by { position: absolute; right: 6px; bottom: 4px; font-size: 10px;
+    color: rgba(255,255,255,.9); font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #info { display: flex; flex-direction: column; justify-content: center;
+    min-width: 460px; gap: 10px; }
+  #info .head { display: flex; align-items: center; gap: 12px; }
+  /* Monochrome Noto Emoji glyph, tinted blue, flipped to run toward the right. */
+  #info .icon { font-family: 'Noto Emoji', sans-serif; font-size: 26px; line-height: 1;
+    color: #3cc7f0; display: inline-block; transform: scaleX(-1); }
+  #info .titles .lbl { font-size: 15px; color: #c4ccd4; line-height: 1.15; }
+  #info .titles .world { font-size: 23px; font-weight: 700; line-height: 1.2;
+    color: #3cc7f0; text-shadow: 0 0 10px rgba(60,199,240,.45); }
+  #track { height: 9px; border-radius: 5px; background: rgba(255,255,255,.14); overflow: hidden; }
+  #fill { height: 100%; width: 2%; border-radius: 5px;
+    background: linear-gradient(90deg, #1c7f93, #38c3d6);
+    box-shadow: 0 0 8px rgba(56,195,214,.6); transition: width .25s linear; }
+  #stats { display: flex; justify-content: space-between; font-size: 14px; }
+  #stats .pct { color: #fff; font-weight: 600; }
+  #stats .size { color: #aab4be; }
+  #back { display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+    background: rgba(10,40,48,.65); color: #d7f6fb; border: 1px solid rgba(56,195,214,.55);
+    padding: 9px 18px; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  #back:hover { background: rgba(20,70,82,.8); }
+  #back .ic { font-family: 'Noto Emoji', sans-serif; font-size: 16px; line-height: 1; color: #d7f6fb; }
 </style>
 </head>
 <body>
 <div id="app"></div>
 
-<button id="sound">🔊 Enable sound</button>
+<div id="panel">
+  <div id="thumb">
+    <div class="by">by mdog</div>
+  </div>
+  <div id="info">
+    <div class="head">
+      <div class="icon">🏃</div>
+      <div class="titles">
+        <div class="lbl">Traveling to</div>
+        <div class="world">mdog的生日会</div>
+      </div>
+    </div>
+    <div id="track"><div id="fill"></div></div>
+    <div id="stats">
+      <span class="pct">--</span>
+      <span class="size">--</span>
+    </div>
+    <div class="btnrow">
+      <a id="back" href="https://calendar.app.google/cqJEQxCLxGDtfLtQA" target="_blank" rel="noopener noreferrer"><span class="ic">📅</span><span class="tx">添加到 Google 日历</span></a>
+      <button id="sound"><span class="ic">🔊</span><span class="tx">开启声音</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+// The progress bar is repurposed as a countdown to mdog's birthday party.
+(function () {
+  // Target: 2027-07-01 23:00 in UTC+8. Window start: exactly two years before,
+  // so the bar fills from 0% to 100% over the run-up to the party.
+  const TARGET = Date.parse('2027-07-01T23:00:00+08:00');
+  const START  = Date.parse('2025-07-01T23:00:00+08:00');
+  const TARGET_LABEL = '2027-07-01 23:00 (UTC+8)';
+
+  const fill   = document.getElementById('fill');
+  const pctEl  = document.querySelector('#stats .pct');
+  const sizeEl = document.querySelector('#stats .size');
+
+  // Keep the horizontal layout intact and just scale the whole panel down to
+  // fit narrow screens (like the real VRChat overlay). offsetWidth/Height stay
+  // at the unscaled layout size, so this is stable across resizes.
+  const panel = document.getElementById('panel');
+  function fitPanel() {
+    const margin = 24;
+    const s = Math.min(1,
+      (innerWidth  - margin) / panel.offsetWidth,
+      (innerHeight - margin) / panel.offsetHeight);
+    panel.style.setProperty('--s', s);
+  }
+  addEventListener('resize', fitPanel);
+  addEventListener('orientationchange', fitPanel);
+  fitPanel();
+
+  const pad = (n) => String(n).padStart(2, '0');
+  function tick() {
+    const now = Date.now();
+    const remain = TARGET - now;
+
+    // Bar: fraction of the two-year window elapsed, clamped to 0..100.
+    const pct = Math.min(100, Math.max(0, (now - START) / (TARGET - START) * 100));
+    fill.style.width = pct.toFixed(2) + '%';
+
+    if (remain <= 0) {
+      pctEl.textContent = '🎉 生日快乐！';
+      fill.style.width = '100%';
+    } else {
+      const sec = Math.floor(remain / 1000);
+      const days = Math.floor(sec / 86400);
+      const h = Math.floor((sec % 86400) / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      pctEl.textContent = `还有 ${days} 天 ${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+    sizeEl.textContent = TARGET_LABEL;
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
 
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
@@ -259,15 +395,40 @@ const stars = new THREE.LineSegments(starGeo, starMat);
 scene.add(stars);
 
 // ---------------------------------------------------------------------------
-// Audio — PartiallyOffline loop, started on first user gesture (autoplay policy).
+// Audio — PartiallyOffline loop. Plays automatically; the button mutes it.
+// If the browser blocks autoplay, fall back to start-on-click.
 // ---------------------------------------------------------------------------
 const soundBtn = document.getElementById('sound');
+const soundIc  = soundBtn.querySelector('.ic');
+const soundTx  = soundBtn.querySelector('.tx');
 const music = new Audio(BASE + encodeURIComponent('PartiallyOffline.wav'));
 music.loop = true; music.volume = 0.6;
-soundBtn.addEventListener('click', () => {
-  if (music.paused) { music.play().then(() => soundBtn.textContent = '🔈 Mute')
-    .catch(() => soundBtn.textContent = '⚠ no audio file'); }
-  else { music.pause(); soundBtn.textContent = '🔊 Enable sound'; }
+
+const showPlaying = () => { soundIc.textContent = '🔊'; soundTx.textContent = '关闭声音'; };
+const showMuted   = () => { soundIc.textContent = '🔇'; soundTx.textContent = '开启声音'; };
+const showError   = () => { soundIc.textContent = '⚠'; soundTx.textContent = '无音频'; };
+// Reflect whatever state playback actually ended up in (play() can resolve muted).
+const syncLabel   = () => { music.paused ? showMuted() : showPlaying(); };
+
+// Try to autoplay immediately; browsers may reject until a user gesture.
+music.play().then(syncLabel).catch(() => {
+  showMuted();
+  const kick = () => {            // first interaction unblocks playback
+    music.play().then(syncLabel).catch(showError);
+    window.removeEventListener('pointerdown', kick);
+    window.removeEventListener('keydown', kick);
+  };
+  window.addEventListener('pointerdown', kick);
+  window.addEventListener('keydown', kick);
+});
+// Keep the label honest if the browser pauses/resumes on its own.
+music.addEventListener('play', showPlaying);
+music.addEventListener('pause', showMuted);
+
+soundBtn.addEventListener('click', (e) => {
+  e.stopPropagation();           // don't let the autoplay "kick" handler also fire
+  if (music.paused) music.play().then(syncLabel).catch(showError);
+  else music.pause();
 });
 
 // ---------------------------------------------------------------------------
