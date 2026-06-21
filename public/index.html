@@ -99,12 +99,43 @@
 </div>
 
 <script>
+// Localize the UI by the browser / system language (zh / ja / English fallback).
+// Detection only — there is no manual switcher.
+(function () {
+  const T = {
+    zh: { title:'mdog的生日会', lbl:'正在前往', world:'mdog的生日会',
+          calendar:'添加到 Google 日历', soundOn:'关闭声音', soundOff:'开启声音', soundErr:'无音频',
+          birthday:'🎉 生日快乐！', countdown:(d,h,m,s)=>`还有 ${d} 天 ${h}:${m}:${s}` },
+    en: { title:"mdog's Birthday Party", lbl:'Traveling to', world:"mdog's Birthday Party",
+          calendar:'Add to Google Calendar', soundOn:'Mute', soundOff:'Enable sound', soundErr:'No audio',
+          birthday:'🎉 Happy Birthday!', countdown:(d,h,m,s)=>`${d}d ${h}:${m}:${s} left` },
+    ja: { title:'mdogの誕生日会', lbl:'移動中', world:'mdogの誕生日会',
+          calendar:'Google カレンダーに追加', soundOn:'ミュート', soundOff:'音を出す', soundErr:'音声なし',
+          birthday:'🎉 お誕生日おめでとう！', countdown:(d,h,m,s)=>`あと ${d}日 ${h}:${m}:${s}` },
+  };
+  const nav = ((navigator.languages && navigator.languages[0]) || navigator.language || 'en').toLowerCase();
+  const lang = nav.startsWith('zh') ? 'zh' : nav.startsWith('ja') ? 'ja' : 'en';
+  const t = T[lang];
+  window.__LANG = lang; window.__T = t;
+
+  document.documentElement.lang = lang;
+  document.title = t.title;
+  const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.textContent = v; };
+  set('#info .titles .lbl', t.lbl);
+  set('#info .titles .world', t.world);
+  set('#back .tx', t.calendar);
+  set('#sound .tx', t.soundOff);
+})();
+</script>
+
+<script>
 // The progress bar is repurposed as a countdown to mdog's birthday party.
 (function () {
-  // Target: 2026-07-01 23:00 in UTC+8. Window start: one year before, so the
-  // bar fills from 0% to 100% over the run-up to the party.
-  const TARGET = Date.parse('2026-07-01T23:00:00+08:00');
-  const START  = Date.parse('2025-07-01T23:00:00+08:00');
+  // Target: 2026-07-01 23:00 in UTC+8 (the party, shown in the countdown).
+  // The bar fills over a fixed window: starts 2026-06-18, full at 2026-07-02.
+  const TARGET    = Date.parse('2026-07-01T23:00:00+08:00');
+  const BAR_START = Date.parse('2026-06-18T00:00:00+08:00');
+  const BAR_END   = Date.parse('2026-07-02T00:00:00+08:00');
   const TARGET_LABEL = '2026-07-01 23:00 (UTC+8)';
 
   const fill   = document.getElementById('fill');
@@ -131,12 +162,13 @@
     const now = Date.now();
     const remain = TARGET - now;
 
-    // Bar: fraction of the two-year window elapsed, clamped to 0..100.
-    const pct = Math.min(100, Math.max(0, (now - START) / (TARGET - START) * 100));
+    // Bar: fraction of the fixed 2026-06-18 → 2026-07-02 window, clamped 0..100.
+    const pct = Math.min(100, Math.max(0, (now - BAR_START) / (BAR_END - BAR_START) * 100));
     fill.style.width = pct.toFixed(2) + '%';
 
+    const T = window.__T;
     if (remain <= 0) {
-      pctEl.textContent = '🎉 生日快乐！';
+      pctEl.textContent = T.birthday;
       fill.style.width = '100%';
     } else {
       const sec = Math.floor(remain / 1000);
@@ -144,7 +176,7 @@
       const h = Math.floor((sec % 86400) / 3600);
       const m = Math.floor((sec % 3600) / 60);
       const s = sec % 60;
-      pctEl.textContent = `还有 ${days} 天 ${pad(h)}:${pad(m)}:${pad(s)}`;
+      pctEl.textContent = T.countdown(days, pad(h), pad(m), pad(s));
     }
     sizeEl.textContent = TARGET_LABEL;
   }
@@ -402,9 +434,10 @@ const soundTx  = soundBtn.querySelector('.tx');
 const music = new Audio(BASE + encodeURIComponent('PartiallyOffline.wav'));
 music.loop = true; music.volume = 0.6;
 
-const showPlaying = () => { soundIc.textContent = '🔊'; soundTx.textContent = '关闭声音'; };
-const showMuted   = () => { soundIc.textContent = '🔇'; soundTx.textContent = '开启声音'; };
-const showError   = () => { soundIc.textContent = '⚠'; soundTx.textContent = '无音频'; };
+const T = window.__T;
+const showPlaying = () => { soundIc.textContent = '🔊'; soundTx.textContent = T.soundOn; };
+const showMuted   = () => { soundIc.textContent = '🔇'; soundTx.textContent = T.soundOff; };
+const showError   = () => { soundIc.textContent = '⚠'; soundTx.textContent = T.soundErr; };
 // Reflect whatever state playback actually ended up in (play() can resolve muted).
 const syncLabel   = () => { music.paused ? showMuted() : showPlaying(); };
 
