@@ -28,6 +28,10 @@ const META = {
 // so they'd otherwise fall back to English. Force Chinese for them.
 const CJK_BOT = /micromessenger|qqbot|\bqq\/|weibo|spider/i;
 
+// Broad link-preview / crawler match (Discord, Telegram, QQ, WeChat, Weibo,
+// Twitter/X, Facebook, Slack, etc.) — these get a buffered, cacheable reply.
+const CRAWLER = /bot|crawler|spider|preview|embed|fetch|scrape|micromessenger|\bqq\/|qqbot|weibo|discord|telegram|twitter|facebookexternalhit|slack|whatsapp|line-poker|bytespider|google|bing|yandex|baidu/i;
+
 function pickLang(request) {
   const ua = request.headers.get("user-agent") || "";
   if (CJK_BOT.test(ua)) return "zh";
@@ -94,11 +98,35 @@ export default {
     }
 
     const res = new Response(assetRes.body, assetRes);
-    // Per-visitor geo + language, so don't let the document be cached/shared.
-    res.headers.set("cache-control", "no-store");
     res.headers.set("vary", "accept-language");
     res.headers.set("x-geo-country", country);
     res.headers.set("x-lang", lang);
-    return rewriter.transform(res);
+    // Always declare UTF-8 in the HTTP header — without it QQ/WeChat can
+    // mis-decode the Chinese <title> and refuse to build a card.
+    res.headers.set("content-type", "text/html; charset=utf-8");
+
+    const transformed = rewriter.transform(res);
+
+    // Link-preview crawlers: hand them a fully-buffered response (explicit
+    // Content-Length, no chunked transfer) that they're allowed to cache.
+    // Simple crawlers like QQ's choke on streamed/chunked or no-store replies.
+    const ua = request.headers.get("user-agent") || "";
+    const isCrawler = CRAWLER.test(ua);
+    if (isCrawler) {
+      const html = await transformed.text();
+      return new Response(html, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "public, max-age=600",
+          "vary": "accept-language",
+          "x-geo-country": country,
+          "x-lang": lang,
+        },
+      });
+    }
+
+    // Humans: per-visitor geo/language, so don't cache the document.
+    transformed.headers.set("cache-control", "no-store");
+    return transformed;
   },
 };
