@@ -24,7 +24,13 @@ const META = {
   ja: { title: "mdogの誕生日会", desc: "mdogからのポータルが届いています。ぜひ見に来てね！" },
 };
 
+// Chinese super-app link crawlers (QQ / WeChat / Weibo) send no Accept-Language,
+// so they'd otherwise fall back to English. Force Chinese for them.
+const CJK_BOT = /micromessenger|qqbot|\bqq\/|weibo|spider/i;
+
 function pickLang(request) {
+  const ua = request.headers.get("user-agent") || "";
+  if (CJK_BOT.test(ua)) return "zh";
   const al = (request.headers.get("accept-language") || "").toLowerCase();
   const first = al.split(",")[0].trim();
   if (first.startsWith("zh")) return "zh";
@@ -59,15 +65,15 @@ export default {
     let rewriter = new HTMLRewriter()
       .on("html", { element(el) { el.setAttribute("lang", lang); } })
       .on("title", { element(el) { el.setInnerContent(meta.title); } })
-      // Localize the social/title meta.
-      .on('meta[property="og:title"], meta[property="og:site_name"], meta[name="twitter:title"]', {
+      // Localize the social/title meta (OG + Twitter + microdata name).
+      .on('meta[property="og:title"], meta[property="og:site_name"], meta[name="twitter:title"], meta[itemprop="name"]', {
         element(el) { el.setAttribute("content", meta.title); },
       })
-      .on('meta[property="og:description"], meta[name="twitter:description"]', {
+      .on('meta[property="og:description"], meta[name="twitter:description"], meta[name="description"], meta[itemprop="description"]', {
         element(el) { el.setAttribute("content", meta.desc); },
       })
       // Make preview assets absolute for link-unfurling crawlers.
-      .on('meta[property="og:image"], meta[name="twitter:image"]', {
+      .on('meta[property="og:image"], meta[name="twitter:image"], meta[itemprop="image"]', {
         element(el) {
           const c = el.getAttribute("content");
           if (c) el.setAttribute("content", abs(c));
