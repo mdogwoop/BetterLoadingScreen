@@ -101,11 +101,11 @@
 <script>
 // The progress bar is repurposed as a countdown to mdog's birthday party.
 (function () {
-  // Target: 2027-07-01 23:00 in UTC+8. Window start: exactly two years before,
-  // so the bar fills from 0% to 100% over the run-up to the party.
-  const TARGET = Date.parse('2027-07-01T23:00:00+08:00');
+  // Target: 2026-07-01 23:00 in UTC+8. Window start: one year before, so the
+  // bar fills from 0% to 100% over the run-up to the party.
+  const TARGET = Date.parse('2026-07-01T23:00:00+08:00');
   const START  = Date.parse('2025-07-01T23:00:00+08:00');
-  const TARGET_LABEL = '2027-07-01 23:00 (UTC+8)';
+  const TARGET_LABEL = '2026-07-01 23:00 (UTC+8)';
 
   const fill   = document.getElementById('fill');
   const pctEl  = document.querySelector('#stats .pct');
