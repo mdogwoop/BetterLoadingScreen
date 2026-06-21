@@ -41,7 +41,10 @@
     padding: 16px; border-radius: 14px;
     background: rgba(10, 16, 24, .82); box-shadow: 0 6px 28px rgba(0,0,0,.45);
     font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
-    color: #fff; user-select: none; backdrop-filter: blur(2px); }
+    color: #fff; user-select: none; backdrop-filter: blur(2px);
+    /* Hidden until the background has painted and the emoji font is ready. */
+    opacity: 0; pointer-events: none; transition: opacity .7s ease; }
+  #panel.ready { opacity: 1; pointer-events: auto; }
   #thumb { width: 156px; height: 120px; border-radius: 9px; flex: none;
     background: #1a1f28 center/cover no-repeat;
     background-image: url('./assets/birthday.png');
@@ -125,6 +128,18 @@
   set('#info .titles .world', t.world);
   set('#back .tx', t.calendar);
   set('#sound .tx', t.soundOff);
+
+  // Reveal the panel only after the background has painted its first frame AND
+  // the Noto Emoji glyphs (🏃 🔊 🔇 ⚠ 📅) are loaded, so nothing pops in late.
+  // A safety timeout guarantees the panel shows even if WebGL or fonts fail.
+  const panel = document.getElementById('panel');
+  const fontReady = (document.fonts && document.fonts.load)
+    ? document.fonts.load("16px 'Noto Emoji'", "🏃🔊🔇⚠📅").then(() => document.fonts.ready).catch(() => {})
+    : Promise.resolve();
+  const bgReady = new Promise((resolve) => { window.__bgReady = resolve; });
+  const safety = new Promise((resolve) => setTimeout(resolve, 5000));
+  Promise.race([Promise.all([fontReady, bgReady]), safety])
+    .then(() => panel.classList.add('ready'));
 })();
 </script>
 
@@ -470,6 +485,7 @@ await Promise.all([buildSky(), buildNebulae(), buildTunnel()]);
 
 const STAR_SPEED = 90;   // ~13s to cross DEPTH, matching the real startLifetime
 const clock = new THREE.Clock();
+let firstFrame = true;
 function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   for (const L of tunnelLayers) {                       // pan + gentle swirl, per layer
@@ -485,6 +501,10 @@ function animate() {
   starGeo.attributes.position.needsUpdate = true;
 
   renderer.render(scene, camera);
+  if (firstFrame) {                 // background has painted — let the panel fade in
+    firstFrame = false;
+    if (window.__bgReady) window.__bgReady();
+  }
   requestAnimationFrame(animate);
 }
 animate();
